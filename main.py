@@ -4,19 +4,15 @@ import time
 
 
 def get_all_neocities_sites():
-    """Traverse the Neocities browse page and collect all the links to the Neocities sites."""
+    """Traverse the Neocities most followed page and collect all the links to the Neocities sites."""
     all_neocities_sites = []
     page_count = 1
     initial_page_url = (
-        f"https://neocities.org/browse?sort_by=newest&tag=&page={page_count}"
+        f"https://neocities.org/browse?sort_by=followers&tag=&page={page_count}"
     )
     next_page_url = initial_page_url
-    while True:
+    while page_count <= 100:  # 100 sites per page, 10,000 sites total
         response = requests.get(next_page_url)
-
-        # Handle HTTP errors
-        if response.status_code != 200:
-            break
 
         soup = BeautifulSoup(response.content, "html.parser")
 
@@ -24,23 +20,27 @@ def get_all_neocities_sites():
         links = soup.find_all("div", class_="title")
         for link in links:
             neocities_site = link.find("a")["href"]
-            all_neocities_sites.append(neocities_site)
+            all_neocities_sites.append(link_formatter(neocities_site))
 
         # If there are no more links, then break the loop
         if links == []:
             break
 
-        print(f"Scraped {len(all_neocities_sites)} neocities sites")
+        print(
+            f"Scraped {len(all_neocities_sites)} neocities sites on url {next_page_url}"
+        )
 
         # Try to go to next page
         page_count += 1
-        next_page_url = initial_page_url + f"&page={page_count}"
+        next_page_url = (
+            f"https://neocities.org/browse?sort_by=followers&tag=&page={page_count}"
+        )
 
     return all_neocities_sites
 
 
 def save_all_neocities_sites_to_txt(all_neocities_sites: list):
-    with open("all_neocities_sites.txt", "w") as file:
+    with open("all_neocities_sites.txt", "w", encoding="utf-8") as file:
         for site in all_neocities_sites:
             file.write(site + "\n")
 
@@ -87,11 +87,15 @@ def search_for_site_mentions():
     with open("all_neocities_sites.txt", "r") as file:
         for line in file:
             site = line.strip()
-            response = requests.get(site)
-            soup = BeautifulSoup(response.content, "html.parser")
+            try:
+                response = requests.get("https://" + site)
+                response.raise_for_status()  # Raise an exception for HTTP errors
+                soup = BeautifulSoup(response.content, "html.parser")
+            except Exception:
+                continue  # Skip the iteration if any errors are encountered
 
-            # Initialize the current site into site_mentions with fields: site, referred_sites[]. We will add referred sites to the list. This is to make it easier to create a graph and show the relationship between the sites.
-            site = link_formatter(site)
+            # Initialize the current site into a dictionary with fields: site, referred_sites[].
+            # We will add referred sites to the list. This is to make it easier to create a graph and show the relationship between the sites.
             site_mentions[site] = {"referred_sites": []}
 
             print("#" + str(count) + " " + site)
@@ -102,18 +106,27 @@ def search_for_site_mentions():
                 process_link(link, site, site_mentions)
 
             # Now check if the neocities site has a /links page. If it does, then scrape the page for more referrals.
-            response = requests.get("http://" + site + "/links")
-            soup = BeautifulSoup(response.content, "html.parser")
+            try:
+                response = requests.get("https://" + site + "/links")
+                response.raise_for_status()  # Raise an exception for HTTP errors
+                soup = BeautifulSoup(response.content, "html.parser")
+            except Exception:
+                continue  # Skip the iteration if any errors are encountered
+
             links = soup.find_all("a")
             for link in links:
                 process_link(link, site, site_mentions)
+
+            # If no links are found, then remove the site from the dictionary
+            if site_mentions[site]["referred_sites"] == []:
+                del site_mentions[site]
 
     return site_mentions
 
 
 # Write the dictionary to a csv file. Keep the root site and referred sites in the same row.
 def save_site_mentions_to_csv(site_mentions: dict):
-    with open("site_mentions.csv", "w") as file:
+    with open("site_mentions.csv", "w", encoding="utf-8") as file:
         for site, referrals in site_mentions.items():
             file.write(site + ",")
             for referral in referrals["referred_sites"]:
@@ -122,21 +135,13 @@ def save_site_mentions_to_csv(site_mentions: dict):
 
 
 # Step 1: Get all neocities sites
-start_time = time.time()
 
-all_neocities_sites = get_all_neocities_sites()
-save_all_neocities_sites_to_txt(all_neocities_sites)
-
-end_time = time.time()
-print(f"Execution time: {round((end_time - start_time) / 60, 1)} minutes")
+# all_neocities_sites = get_all_neocities_sites()
+# save_all_neocities_sites_to_txt(all_neocities_sites)
 
 # Step 2: Search for site mentions within each site
-start_time = time.time()
 
 site_mentions = search_for_site_mentions()
 save_site_mentions_to_csv(site_mentions)
-
-end_time = time.time()
-print(f"Execution time: {round((end_time - start_time) / 60, 1)} minutes")
 
 # Now we have a list of neocities sites and their referrals. We can now create a graph of the sites.
