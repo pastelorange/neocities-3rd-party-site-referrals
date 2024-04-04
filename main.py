@@ -1,10 +1,25 @@
 import requests
 from bs4 import BeautifulSoup
-import time
+from neo4j import GraphDatabase
+
+
+def link_formatter(href):
+    """Format the href to only show the root domain. (ex. https://username.neocities.org/ -> username.neocities.org)"""
+
+    if href.startswith("http://"):
+        href = href[7:]
+    if href.startswith("https://"):
+        href = href[8:]
+    if href.startswith("www."):
+        href = href[4:]
+    if "/" in href:
+        href = href.split("/")[0]
+    return href
 
 
 def get_all_neocities_sites():
-    """Traverse the Neocities most followed page and collect all the links to the Neocities sites."""
+    """Traverse the Neocities most followed page and collect all user sites."""
+
     all_neocities_sites = []
     page_count = 1
     initial_page_url = (
@@ -40,108 +55,140 @@ def get_all_neocities_sites():
 
 
 def save_all_neocities_sites_to_txt(all_neocities_sites: list):
+    """Writes the list of all neocities sites to a text file."""
+
     with open("all_neocities_sites.txt", "w", encoding="utf-8") as file:
         for site in all_neocities_sites:
             file.write(site + "\n")
 
 
-def link_formatter(href):
-    """Format the href to only show the root domain. (ex. https://username.neocities.org/ -> username.neocities.org)"""
-    if href.startswith("http://"):
-        href = href[7:]
-    if href.startswith("https://"):
-        href = href[8:]
-    if href.startswith("www."):
-        href = href[4:]
-    if "/" in href:
-        href = href.split("/")[0]
-    return href
+def process_link(link: str, site: str, site_referrals: dict):
+    """Check the link and add it to the site_referrals dictionary if it meets the criteria."""
 
-
-def process_link(link, site, site_mentions):
-    """Check the link and add it to the site_mentions dictionary if it meets the criteria."""
     if link.has_attr("href"):
+        link = link["href"]
         # Check if link is not the root site and is not neocities.org and is not already in this site key and is not a relative link
         if (
-            (site not in link["href"])
-            and ("://neocities.org" not in link["href"])
-            and (
-                link_formatter(link["href"])
-                not in site_mentions[site]["referred_sites"]
-            )
-            and (link["href"].startswith("http") or link["href"].startswith("https"))
+            (site not in link)
+            and ("://neocities.org" not in link)
+            and (link_formatter(link) not in site_referrals[site]["referrals"])
+            and (link.startswith("http") or link.startswith("https"))
         ):
-            referral = link_formatter(link["href"])
+            referral = link_formatter(link)
 
             # Add the referred site to the dictionary
-            site_mentions[site]["referred_sites"].append(referral)
+            site_referrals[site]["referrals"].append(referral)
 
 
-def search_for_site_mentions():
-    """Search for site mentions within each site. This function will return a dictionary with the root site and referred sites."""
+def search_for_site_referrals():
+    """
+    Search for site referrals within each site.
+    It will search through the index, home, and links pages of each site.
+    This function will return a dictionary ("site": {"referrals": []})
+    """
 
     # Create a dictionary to store the root site and referred sites
-    site_mentions = {}
+    site_referrals = {}
 
     count = 1
+
     with open("all_neocities_sites.txt", "r") as file:
         for line in file:
-            site = line.strip()
             try:
+                print(f"Scraping site {count}")
+                count += 1
+
+                site = line.strip()
+
                 response = requests.get("https://" + site)
-                response.raise_for_status()  # Raise an exception for HTTP errors
                 soup = BeautifulSoup(response.content, "html.parser")
-            except Exception:
-                continue  # Skip the iteration if any errors are encountered
 
-            # Initialize the current site into a dictionary with fields: site, referred_sites[].
-            # We will add referred sites to the list. This is to make it easier to create a graph and show the relationship between the sites.
-            site_mentions[site] = {"referred_sites": []}
+                # Initialize the current site into a dictionary with fields: site, referrals[].
+                site_referrals[site] = {"referrals": []}
 
-            print("#" + str(count) + " " + site)
-            count += 1
+                # Find and collect links
+                links = soup.find_all("a")
+                for link in links:
+                    process_link(link, site, site_referrals)
 
-            links = soup.find_all("a")
-            for link in links:
-                process_link(link, site, site_mentions)
-
-            # Now check if the neocities site has a /links page. If it does, then scrape the page for more referrals.
-            try:
+                # Check if the site has a /home page. If it does, then scrape the page for more referrals.
                 response = requests.get("https://" + site + "/links")
-                response.raise_for_status()  # Raise an exception for HTTP errors
                 soup = BeautifulSoup(response.content, "html.parser")
-            except Exception:
+
+                # Find and collect links
+                links = soup.find_all("a")
+                for link in links:
+                    process_link(link, site, site_referrals)
+
+                # Check if the site has a /links page. If it does, then scrape the page for more referrals.
+                response = requests.get("https://" + site + "/links")
+                soup = BeautifulSoup(response.content, "html.parser")
+
+                # Find and collect links
+                links = soup.find_all("a")
+                for link in links:
+                    process_link(link, site, site_referrals)
+
+            except Exception as err:
+                print(err)
                 continue  # Skip the iteration if any errors are encountered
 
-            links = soup.find_all("a")
-            for link in links:
-                process_link(link, site, site_mentions)
-
-            # If no links are found, then remove the site from the dictionary
-            if site_mentions[site]["referred_sites"] == []:
-                del site_mentions[site]
-
-    return site_mentions
+    return site_referrals
 
 
-# Write the dictionary to a csv file. Keep the root site and referred sites in the same row.
-def save_site_mentions_to_csv(site_mentions: dict):
-    with open("site_mentions.csv", "w", encoding="utf-8") as file:
-        for site, referrals in site_mentions.items():
+def save_site_referrals_to_csv(site_referrals: dict):
+    """Write the dictionary to a csv file. Keep the root site and referred sites in the same row."""
+
+    with open("site_referrals.csv", "w", encoding="utf-8") as file:
+        # Write the header
+        file.write("Site,Referrals\n")
+
+        for site, referrals in site_referrals.items():
+            # If there are no referrals, then skip the site
+            if referrals["referrals"] == []:
+                continue
+
             file.write(site + ",")
-            for referral in referrals["referred_sites"]:
+            for referral in referrals["referrals"]:
                 file.write(referral + ",")
             file.write("\n")
 
 
-# Step 1: Get all neocities sites
+def create_neo4j_graph():
+    """Create a webgraph of the sites in Neo4j. NOTE: You need to place the csv file in the import folder of your Neo4j database."""
 
-# all_neocities_sites = get_all_neocities_sites()
-# save_all_neocities_sites_to_txt(all_neocities_sites)
+    uri = "bolt://localhost:7687"
+    database = "neo4j"
+    password = "bruh1234"
+    driver = GraphDatabase.driver(uri, auth=(database, password))
+
+    with driver.session() as session:
+        session.run(
+            """
+            LOAD CSV WITH HEADERS FROM 'file:///site_referrals.csv' AS row
+            MERGE (site:Site {name: COALESCE(row.Site, "")})
+            WITH site, split(row.Referrals, ",") AS referrals
+            UNWIND referrals AS referral
+            MERGE (referred:Site {name: COALESCE(referral, "")})
+            MERGE (site)-[:REFERS]->(referred)
+            """
+        )
+
+    driver.close()
+
+
+# Step 1: Get all neocities sites
+# save_all_neocities_sites_to_txt(get_all_neocities_sites())
 
 # Step 2: Search for site mentions within each site
+# save_site_referrals_to_csv(search_for_site_referrals())
 
-site_mentions = search_for_site_mentions()
-save_site_mentions_to_csv(site_mentions)
+# Step 3: Create a graph of the sites in Neo4j
+# create_neo4j_graph()
 
-# Now we have a list of neocities sites and their referrals. We can now create a graph of the sites.
+"""Use this script to query the most referred sites
+MATCH (n)--()
+RETURN n, COUNT(*) AS neighbours
+ORDER BY neighbours DESC
+LIMIT 100
+"""
