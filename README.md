@@ -1,8 +1,8 @@
-# Webscrape of Neocities Site Referrals
+# Web Scrape of Neocities Site Referrals
 
-This is a webscraping project of [Neocities](https://neocities.org), investigating what are the most referenced third-party sites on each popular Neocities sites.
+This is a web scraping project of [Neocities](https://neocities.org), investigating what are the most referenced third-party sites on each popular Neocities sites.
 
-The webscraping data is from April 1, 2024.
+The web scraping data is from April 1, 2024.
 
 `all_neocities_sites.txt` contains the domains of the top 10,000 Neocities sites, sorted by follower count.\
 `all_neocities_sites_sort_by_new.txt` contains the domains of every Neocities site (count: 358,000), sorted by last updated.\
@@ -17,7 +17,7 @@ The webscraping data is from April 1, 2024.
 
 ## Abstract
 
-This web crawling project is important as it delves into the intricate relationships
+This web scraping project is important as it delves into the intricate relationships
 between Neocities sites. Neocities, the spiritual successor to the early internet's
 GeoCities, is a free site hosting platform that was pivotal in popularizing indie web
 culture in the modern age. A vital aspect of this culture is the interaction between
@@ -43,7 +43,7 @@ significantly more manageable than the entire dataset, ensuring the project's fe
 ## Methods
 
 This project was executed using the Python 3 package Beautiful Soup 4, a
-powerful tool for web crawling. A script was created to crawl the Neocities' top 10,000
+powerful tool for web scraping. A script was created to crawl the Neocities' top 10,000
 most followed sites. The crawling process was efficient, taking approximately 0.8
 seconds per pagination, translating to 80 seconds to collect the 10,000 sites. Each site
 was written in a text file. No errors were encountered parsing the HTML.
