@@ -1,4 +1,4 @@
-# Web Scrape of Neocities Site Referrals
+# Neocities Third Party Site Referrals
 
 This is a web scraping project of [Neocities](https://neocities.org), investigating what are the most referenced third-party sites on each popular Neocities sites.
 
