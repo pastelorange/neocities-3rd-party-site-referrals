@@ -1,6 +1,6 @@
-# Neocities Third Party Site Referrals
+# Neocities Webgraph
 
-This is a web scraping project of [Neocities](https://neocities.org), investigating what are the most referenced third-party sites on each popular Neocities sites.
+This is a web scraping project of [Neocities](https://neocities.org), investigating what are the most referenced (hyperlinked) third-party sites on each popular Neocities sites.
 
 The web scraping data is from April 1, 2024.
 
